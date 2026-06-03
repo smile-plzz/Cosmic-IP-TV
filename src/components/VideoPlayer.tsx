@@ -3,7 +3,6 @@ import Hls from 'hls.js';
 import { Play, AlertCircle, Loader2, Maximize2 } from 'lucide-react';
 import { Channel } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '@/src/lib/utils';
 
 interface VideoPlayerProps {
   channel: Channel | null;
@@ -15,29 +14,34 @@ interface VideoPlayerProps {
 export function VideoPlayer({ channel, onNext, volume, isMuted }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
   const hlsRef = useRef<Hls | null>(null);
 
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.volume = volume / 100;
-      videoRef.current.muted = isMuted;
-    }
-  }, [volume, isMuted]);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
 
+  // Volume + mute sync
   useEffect(() => {
-    if (!channel) {
-      setStatus('idle');
-      return;
-    }
-
     const video = videoRef.current;
     if (!video) return;
+    video.volume = Math.min(Math.max(volume / 100, 0), 1);
+    video.muted = isMuted;
+  }, [volume, isMuted]);
+
+  // Stream handling
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!channel) {
+      setStatus('idle');
+      setErrorMsg('');
+      return;
+    }
 
     setStatus('loading');
     setErrorMsg('');
 
+    // cleanup previous stream
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -45,35 +49,50 @@ export function VideoPlayer({ channel, onNext, volume, isMuted }: VideoPlayerPro
 
     const url = channel.url;
 
+    const tryPlay = async () => {
+      try {
+        await video.play();
+        setStatus('playing');
+      } catch {
+        // autoplay might be blocked (mobile safe handling)
+        setStatus('playing');
+      }
+    };
+
     if (Hls.isSupported()) {
       const hls = new Hls({
-        enableWorker: false,
         lowLatencyMode: true,
-        maxBufferLength: 30,
+        maxBufferLength: 20,
       });
+
       hlsRef.current = hls;
       hls.loadSource(url);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
-        setStatus('playing');
-      });
+
+      hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
           setStatus('error');
-          setErrorMsg('Stream unavailable or geo-blocked');
+          setErrorMsg('Stream unavailable or network blocked');
+          hls.destroy();
+          hlsRef.current = null;
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = url;
-      video.addEventListener('loadedmetadata', () => {
-        video.play().catch(() => {});
-        setStatus('playing');
-      }, { once: true });
-      video.addEventListener('error', () => {
+
+      const onLoaded = () => {
+        tryPlay();
+      };
+
+      const onError = () => {
         setStatus('error');
         setErrorMsg('Stream failed to load');
-      }, { once: true });
+      };
+
+      video.addEventListener('loadedmetadata', onLoaded, { once: true });
+      video.addEventListener('error', onError, { once: true });
     }
 
     return () => {
@@ -84,92 +103,97 @@ export function VideoPlayer({ channel, onNext, volume, isMuted }: VideoPlayerPro
     };
   }, [channel]);
 
-  const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen();
+  // Fullscreen (mobile + desktop safe)
+  const toggleFullscreen = async () => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await el.requestFullscreen?.();
+      } else {
+        await document.exitFullscreen?.();
+      }
+    } catch {
+      // fallback (iOS Safari limitation)
     }
   };
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="relative flex-1 bg-black overflow-hidden flex items-center justify-center group"
+      className="
+        relative flex-1 bg-black overflow-hidden flex items-center justify-center group
+        w-full h-full
+      "
     >
       <video
         ref={videoRef}
-        className="w-full h-full object-contain"
+        className="
+          w-full h-full object-contain bg-black
+          max-h-[100vh]
+        "
         controls
         playsInline
+        webkit-playsinline="true"
       />
 
       <AnimatePresence>
         {status === 'idle' && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="absolute flex flex-col items-center gap-6 text-gray-500"
+            exit={{ opacity: 0 }}
+            className="absolute flex flex-col items-center gap-6 text-gray-500 px-4"
           >
-            <div className="w-24 h-24 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center shadow-2xl relative group">
-              <div className="absolute inset-0 rounded-full bg-emerald-500/5 blur-xl group-hover:bg-emerald-500/10 transition-all" />
-              <Play className="w-10 h-10 text-emerald-500/40 relative z-10" />
-            </div>
-            <div className="flex flex-col items-center gap-2">
-              <span className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-gray-400">Select Stream</span>
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-gray-600">Choose a channel from the sidebar to begin</span>
-            </div>
+            <Play className="w-12 h-12 text-emerald-400/40" />
+            <span className="text-xs uppercase tracking-widest text-gray-400 text-center">
+              Select a channel to start streaming
+            </span>
           </motion.div>
         )}
 
         {status === 'loading' && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-4"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60"
           >
             <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-            <span className="font-mono text-xs text-gray-400 animate-pulse uppercase tracking-wider">Connecting to Stream...</span>
+            <span className="text-xs text-gray-400 uppercase tracking-wider">
+              Connecting...
+            </span>
           </motion.div>
         )}
 
         {status === 'error' && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-6 p-10 text-center"
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 p-6 text-center"
           >
-            <AlertCircle className="w-16 h-16 text-red-500" />
-            <div className="space-y-2">
-              <h3 className="text-xl font-semibold text-white">Playback Error</h3>
-              <p className="text-gray-400 max-w-sm font-mono text-xs">{errorMsg}</p>
-            </div>
-            <div className="flex gap-4">
-              <button 
-                onClick={onNext}
-                className="px-6 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg transition-colors font-mono text-xs uppercase"
-              >
-                Try Next Stream
+            <AlertCircle className="w-14 h-14 text-red-500" />
+            <p className="text-sm text-gray-300 max-w-sm">{errorMsg}</p>
+
+            <div className="flex gap-3">
+              <button onClick={onNext} className="px-4 py-2 text-xs bg-emerald-500/10 text-emerald-400 rounded">
+                Next Stream
               </button>
-              <button 
-                onClick={() => setStatus('idle')}
-                className="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors font-mono text-xs uppercase"
-              >
-                Dismiss
+              <button onClick={() => setStatus('idle')} className="px-4 py-2 text-xs bg-gray-800 text-gray-300 rounded">
+                Retry
               </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <button 
+      {/* Fullscreen button */}
+      <button
         onClick={toggleFullscreen}
-        className="absolute bottom-6 right-6 p-2 bg-black/40 hover:bg-black/60 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute bottom-4 right-4 p-2 bg-black/40 hover:bg-black/70 rounded opacity-0 group-hover:opacity-100 transition"
       >
-        <Maximize2 className="w-5 h-5" />
+        <Maximize2 className="w-5 h-5 text-white" />
       </button>
     </div>
   );
