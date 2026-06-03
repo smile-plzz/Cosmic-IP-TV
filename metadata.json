@@ -1,0 +1,6 @@
+{
+  "name": "Cosmic IPTV Stream",
+  "description": "A high-performance, polished IPTV stream player with virtual scrolling and real-time live indexing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
