@@ -65,7 +65,7 @@ export function Sidebar({ channels, recentChannels, curCh, onChannelSelect, acti
   }, [visibleChannels, start, end]);
 
   return (
-    <div className="w-full lg:w-[292px] h-[300px] lg:h-full flex-shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.07] bg-[#12151c] flex flex-col overflow-hidden">
+    <div className="w-full lg:w-[292px] h-full flex-shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.07] bg-[#12151c] flex flex-col overflow-hidden">
       <div className="flex border-b border-white/[0.05] flex-shrink-0 bg-black/20">
         {(['all', 'hd', 'recent'] as ActiveTab[]).map(tab => (
           <button
