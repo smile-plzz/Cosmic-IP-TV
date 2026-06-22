@@ -3,20 +3,36 @@ import { Channel, ActiveTab } from '@/src/types';
 import { ChannelItem } from './ChannelItem';
 import { cn } from '@/src/lib/utils';
 import { motion } from 'motion/react';
+import { ChannelSkeleton } from './Skeleton';
 
 interface SidebarProps {
   channels: Channel[];
   recentChannels: Channel[];
+  favoriteChannels: Channel[];
   curCh: Channel | null;
   onChannelSelect: (ch: Channel, idx: number) => void;
+  onToggleFavorite: (ch: Channel) => void;
+  isFavorite: (url: string) => boolean;
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  isLoading?: boolean;
 }
 
 const ITEM_H = 52;
 const OVERSCAN = 10;
 
-export function Sidebar({ channels, recentChannels, curCh, onChannelSelect, activeTab, setActiveTab }: SidebarProps) {
+export function Sidebar({ 
+  channels, 
+  recentChannels, 
+  favoriteChannels,
+  curCh, 
+  onChannelSelect, 
+  onToggleFavorite,
+  isFavorite,
+  activeTab, 
+  setActiveTab,
+  isLoading 
+}: SidebarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(0);
@@ -41,6 +57,7 @@ export function Sidebar({ channels, recentChannels, curCh, onChannelSelect, acti
 
   const visibleChannels = useMemo(() => {
     if (activeTab === 'recent') return recentChannels;
+    if (activeTab === 'favorites') return favoriteChannels;
     if (activeTab === 'hd') {
        return channels.filter(ch => {
         const q = (ch.quality || '').toLowerCase();
@@ -49,7 +66,7 @@ export function Sidebar({ channels, recentChannels, curCh, onChannelSelect, acti
       });
     }
     return channels;
-  }, [activeTab, channels, recentChannels]);
+  }, [activeTab, channels, recentChannels, favoriteChannels]);
 
   // Virtualization math
   const total = visibleChannels.length;
@@ -65,14 +82,14 @@ export function Sidebar({ channels, recentChannels, curCh, onChannelSelect, acti
   }, [visibleChannels, start, end]);
 
   return (
-    <div className="w-full lg:w-[292px] h-full flex-shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.07] bg-[#12151c] flex flex-col overflow-hidden">
-      <div className="flex border-b border-white/[0.05] flex-shrink-0 bg-black/20">
-        {(['all', 'hd', 'recent'] as ActiveTab[]).map(tab => (
+    <div className="w-full lg:w-[320px] h-full flex-shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.07] bg-[#0b0d11] flex flex-col overflow-hidden">
+      <div className="flex border-b border-white/[0.05] flex-shrink-0 bg-transparent">
+        {(['all', 'hd', 'recent', 'favorites'] as ActiveTab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={cn(
-              "flex-1 py-4 text-[10px] font-bold tracking-[0.2em] uppercase transition-all relative overflow-hidden group",
+              "flex-1 py-4 text-[10px] font-bold tracking-[0.1em] uppercase transition-all relative overflow-hidden group cursor-pointer",
               activeTab === tab ? "text-white" : "text-gray-500 hover:text-gray-300"
             )}
           >
@@ -80,52 +97,65 @@ export function Sidebar({ channels, recentChannels, curCh, onChannelSelect, acti
             {activeTab === tab && (
               <motion.div 
                 layoutId="activeTab"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" 
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" 
               />
             )}
           </button>
         ))}
       </div>
 
-      <div className="px-4 py-2 bg-white/[0.02] border-b border-white/[0.05] flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]" />
-           <span className="font-mono text-[9px] text-gray-400 font-medium tracking-wider uppercase">{total.toLocaleString()} CHANNELS</span>
+      <div className="px-5 py-3 border-b border-white/[0.03] flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+           <div className={cn(
+             "w-1.5 h-1.5 rounded-full",
+             isLoading ? "bg-gray-700 animate-pulse" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+           )} />
+           <span className="font-sans text-[10px] text-gray-500 font-bold tracking-[0.1em] uppercase">
+             {isLoading ? 'Fetching Sources...' : `${total.toLocaleString()} Channels`}
+           </span>
         </div>
       </div>
 
       <div 
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10"
+        className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 sidebar-scroll-area"
       >
-        <div 
-          className="relative w-full"
-          style={{ height: total * ITEM_H }}
-        >
+        {isLoading && total === 0 ? (
+          Array.from({ length: 15 }).map((_, i) => <ChannelSkeleton key={i} />)
+        ) : (
           <div 
-            className="absolute top-0 left-0 right-0"
-            style={{ transform: `translateY(${start * ITEM_H}px)` }}
+            className="relative w-full"
+            style={{ height: total * ITEM_H }}
           >
-            {visibleItems.map(({ ch, index }) => (
-              <ChannelItem
-                key={`${ch.url}-${index}`}
-                channel={ch}
-                index={index}
-                active={curCh?.url === ch.url}
-                onClick={onChannelSelect}
-              />
-            ))}
-            {total === 0 && (
-              <div className="flex flex-col items-center justify-center pt-20 text-gray-600 gap-3">
-                <div className="w-12 h-12 rounded-full border border-white/5 flex items-center justify-center">
-                  <div className="w-4 h-4 rounded-full border border-current opacity-20" />
+            <div 
+              className="absolute top-0 left-0 right-0"
+              style={{ transform: `translateY(${start * ITEM_H}px)` }}
+            >
+              {visibleItems.map(({ ch, index }) => (
+                <ChannelItem
+                  key={`${ch.url}-${index}`}
+                  channel={ch}
+                  index={index}
+                  active={curCh?.url === ch.url}
+                  isFavorite={isFavorite(ch.url)}
+                  onToggleFavorite={onToggleFavorite}
+                  onClick={onChannelSelect}
+                />
+              ))}
+              {total === 0 && (
+                <div className="flex flex-col items-center justify-center pt-20 text-gray-600 gap-3">
+                  <div className="w-12 h-12 rounded-full border border-white/5 flex items-center justify-center">
+                    <div className="w-4 h-4 rounded-full border border-current opacity-20" />
+                  </div>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-center px-6">
+                    {activeTab === 'favorites' ? 'No Stars Yet' : 'No Channels Found'}
+                  </span>
                 </div>
-                <span className="font-mono text-[10px] uppercase tracking-widest">No Channels Found</span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

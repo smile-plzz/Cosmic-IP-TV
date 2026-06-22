@@ -8,4 +8,4 @@ export interface Channel {
   quality?: string;
 }
 
-export type ActiveTab = 'all' | 'hd' | 'recent';
+export type ActiveTab = 'all' | 'hd' | 'recent' | 'favorites';

@@ -3,10 +3,14 @@ import { Channel } from '@/src/types';
 import { cn, initials, flag } from '@/src/lib/utils';
 import { motion } from 'motion/react';
 
+import { Heart } from 'lucide-react';
+
 interface ChannelItemProps {
   channel: Channel;
   index: number;
   active: boolean;
+  isFavorite: boolean;
+  onToggleFavorite: (channel: Channel) => void;
   onClick: (channel: Channel, index: number) => void;
   style?: React.CSSProperties;
 }
@@ -31,7 +35,7 @@ const LiveBars = () => (
   </div>
 );
 
-export const ChannelItem = React.memo(({ channel, active, onClick, index, style }: ChannelItemProps) => {
+export const ChannelItem = React.memo(({ channel, active, onClick, onToggleFavorite, isFavorite, index, style }: ChannelItemProps) => {
   const isHD = (ch: Channel) => {
     const q = (ch.quality || '').toLowerCase();
     const n = (ch.name || '').toLowerCase();
@@ -42,7 +46,7 @@ export const ChannelItem = React.memo(({ channel, active, onClick, index, style 
     <div 
       style={style}
       className={cn(
-        "flex items-center gap-3 px-4 h-[52px] cursor-pointer transition-colors border-b border-white/[0.05] group select-none",
+        "flex items-center gap-3 px-4 h-[52px] cursor-pointer transition-colors border-b border-white/[0.05] group select-none relative",
         active ? "bg-emerald-500/[0.08]" : "hover:bg-white/[0.02]"
       )}
       onClick={() => onClick(channel, index)}
@@ -58,21 +62,22 @@ export const ChannelItem = React.memo(({ channel, active, onClick, index, style 
               (e.target as HTMLImageElement).style.display = 'none';
               (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
             }}
+            referrerPolicy="no-referrer"
           />
         ) : null}
         <div className={cn(
-          "w-full h-full rounded-md border border-white/10 bg-gray-800 flex items-center justify-center text-[10px] font-mono text-gray-500 font-medium",
+          "w-full h-full rounded-md border border-white/10 bg-gray-800 flex items-center justify-center text-[10px] font-mono text-gray-500 font-medium font-bold",
           channel.logo ? "hidden" : "flex"
         )}>
           {initials(channel.name)}
         </div>
       </div>
 
-      <div className="flex-1 min-width-0 overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden pr-8">
         <div className="flex items-center justify-between gap-2">
           <div className={cn(
             "text-[13px] font-medium truncate leading-tight",
-            active ? "text-emerald-400" : "text-gray-200 group-hover:text-white"
+            active ? "text-emerald-400 font-bold" : "text-gray-200 group-hover:text-white"
           )}>
             {channel.name}
           </div>
@@ -94,6 +99,19 @@ export const ChannelItem = React.memo(({ channel, active, onClick, index, style 
           )}
         </div>
       </div>
+
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite(channel);
+        }}
+        className={cn(
+          "absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100 cursor-pointer",
+          isFavorite ? "opacity-100 text-pink-500" : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+        )}
+      >
+        <Heart className={cn("w-3.5 h-3.5 transition-transform active:scale-125", isFavorite && "fill-current")} />
+      </button>
     </div>
   );
 });

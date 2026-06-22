@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Play, AlertCircle, Loader2, Maximize2 } from 'lucide-react';
+import { Play, AlertCircle, Loader2, Maximize2, MonitorPlay } from 'lucide-react';
 import { Channel } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
@@ -18,7 +18,12 @@ export function VideoPlayer({ channel, onNext, volume, isMuted, onPlayError }: V
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isPiPSupported, setIsPiPSupported] = useState(false);
   const hlsRef = useRef<Hls | null>(null);
+
+  useEffect(() => {
+    setIsPiPSupported(document.pictureInPictureEnabled);
+  }, []);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -26,6 +31,11 @@ export function VideoPlayer({ channel, onNext, volume, isMuted, onPlayError }: V
       videoRef.current.muted = isMuted;
     }
   }, [volume, isMuted]);
+
+  const onPlayErrorRef = useRef(onPlayError);
+  useEffect(() => {
+    onPlayErrorRef.current = onPlayError;
+  }, [onPlayError]);
 
   useEffect(() => {
     if (!channel) {
@@ -63,8 +73,8 @@ export function VideoPlayer({ channel, onNext, volume, isMuted, onPlayError }: V
         if (data.fatal) {
           setStatus('error');
           setErrorMsg('Stream unavailable, offline, or CORS-restricted by browser policies');
-          if (onPlayError) {
-            onPlayError(url);
+          if (onPlayErrorRef.current) {
+            onPlayErrorRef.current(url);
           }
         }
       });
@@ -77,8 +87,8 @@ export function VideoPlayer({ channel, onNext, volume, isMuted, onPlayError }: V
       video.addEventListener('error', () => {
         setStatus('error');
         setErrorMsg('Stream failed to load due to server offline status or protocol restrictions');
-        if (onPlayError) {
-          onPlayError(url);
+        if (onPlayErrorRef.current) {
+          onPlayErrorRef.current(url);
         }
       }, { once: true });
     }
@@ -89,7 +99,7 @@ export function VideoPlayer({ channel, onNext, volume, isMuted, onPlayError }: V
         hlsRef.current = null;
       }
     };
-  }, [channel, onPlayError]);
+  }, [channel]);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -97,6 +107,19 @@ export function VideoPlayer({ channel, onNext, volume, isMuted, onPlayError }: V
       containerRef.current.requestFullscreen().catch(() => {});
     } else {
       document.exitFullscreen();
+    }
+  };
+
+  const togglePiP = async () => {
+    if (!videoRef.current) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await videoRef.current.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.error('Failed to toggle PiP:', err);
     }
   };
 
@@ -175,12 +198,24 @@ export function VideoPlayer({ channel, onNext, volume, isMuted, onPlayError }: V
         )}
       </AnimatePresence>
 
-      <button 
-        onClick={toggleFullscreen}
-        className="absolute bottom-6 right-6 p-2 bg-black/40 hover:bg-black/60 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        <Maximize2 className="w-5 h-5" />
-      </button>
+      <div className="absolute bottom-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isPiPSupported && status === 'playing' && (
+          <button 
+            onClick={togglePiP}
+            className="p-2 bg-black/40 hover:bg-black/60 text-white rounded-lg transition-all active:scale-95 cursor-pointer"
+            title="Picture-in-Picture"
+          >
+            <MonitorPlay className="w-5 h-5" />
+          </button>
+        )}
+        <button 
+          onClick={toggleFullscreen}
+          className="p-2 bg-black/40 hover:bg-black/60 text-white rounded-lg transition-all active:scale-95 cursor-pointer"
+          title="Fullscreen"
+        >
+          <Maximize2 className="w-5 h-5" />
+        </button>
+      </div>
     </div>
   );
 }
